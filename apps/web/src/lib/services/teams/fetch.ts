@@ -39,9 +39,11 @@ export type TeamMember = {
 export const getTeamMembers = async (
     teamId: string,
 ): Promise<TeamMember[]> => {
-    const response = await authorizedFetch<TeamMember[]>(
+    // The endpoint answers `{ members: [...] }`; `authorizedFetch` unwraps the
+    // outer `{ data }` envelope but not this one.
+    const response = await authorizedFetch<{ members: TeamMember[] }>(
         TEAMS_PATHS.MEMBERS(teamId),
     );
 
-    return response ?? [];
+    return response?.members ?? [];
 };
