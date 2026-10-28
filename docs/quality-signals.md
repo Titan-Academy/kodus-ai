@@ -1,5 +1,10 @@
 # Quality signals
 
+> **Fork note.** The e2e, benchmark and release workflows this page describes were
+> removed in this fork along with the rest of the upstream release machinery —
+> see `.github/workflows/`. Only `themis-images.yml` and the PR quality gates
+> remain, so the scoreboard below no longer receives those signals.
+
 Every quality gate writes one row per run to `quality.signals` in the analytics warehouse, through kodus-quality's `POST /api/ingest`. The
 dashboard and the daily digest read it. Nothing is computed there: the producer decides
 the status, the table records it.

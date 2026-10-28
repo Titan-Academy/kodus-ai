@@ -30,21 +30,10 @@ permissions:
     id-token: write # quality signal (report-signal action, WIF)
 
 on:
-    schedule:
-        # Daily 06:00 UTC (03:00 BRT) — after the nightly crons, before the
-        # workday starts in BRT.
-        - cron: "0 6 * * *"
-        # Weekly Friday 03:00 UTC — the BYOK reasoning LIVE tier only, in the
-        # release train's slot so every per-model signal (this and the tier-0
-        # eval smoke) is in before the release meeting. Weekly,
-        # not daily, because unlike the near-free REST pings above this one
-        # spends real tokens on seven providers; the drift it catches (a model
-        # changing how it is configured) moves on a scale of weeks, not hours.
-        #
-        # THIS STRING APPEARS IN BOTH JOBS' `if:` BELOW. A spec invariant checks
-        # the three copies agree, because when they drift either both tiers run
-        # on Friday or neither does.
-        - cron: "0 3 * * 5"
+    # Fork: the two upstream crons were removed with the release machinery.
+    # They ran live provider contracts against 24 repo/environment secrets that
+    # do not exist here, so every scheduled run was a guaranteed red. The PR
+    # trigger below stays for the case where someone edits a contract spec.
     workflow_dispatch:
     # Deliberately NOT every PR (an external API flaking must not block an
     # unrelated merge) — only PRs that touch the contract tests themselves
