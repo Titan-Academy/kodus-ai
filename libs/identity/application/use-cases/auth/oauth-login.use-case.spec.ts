@@ -19,12 +19,14 @@ describe('OAuthLoginUseCase — provider token gating', () => {
         };
         const signUpUseCase = { execute: jest.fn() };
         const telemetry = { userLoggedIn: jest.fn() };
+        const singleTenant = { allowsNewAccount: jest.fn().mockResolvedValue(true) };
         const useCase = new OAuthLoginUseCase(
             authService as any,
             signUpUseCase as any,
             telemetry as any,
+            singleTenant as any,
         );
-        return { useCase, authService, signUpUseCase, telemetry };
+        return { useCase, authService, signUpUseCase, telemetry, singleTenant };
     };
 
     it('rejects when the provider token cannot be verified — no JWT issued', async () => {
@@ -112,5 +114,86 @@ describe('OAuthLoginUseCase — provider token gating', () => {
         expect(signUpUseCase.execute).toHaveBeenCalledWith(
             expect.objectContaining({ email: 'new@example.com' }),
         );
+    });
+
+    // A single-tenant workspace is one company's install, not a public
+    // service. Provisioning whoever the provider verifies let any GitHub
+    // account that reached the login page into the company's reviews.
+    it('refuses to provision an account the workspace has not added', async () => {
+        const { useCase, authService, signUpUseCase, singleTenant } =
+            makeDeps();
+        authService.verifyOAuthProviderEmail.mockResolvedValue({
+            email: 'stranger@example.com',
+            name: 'Stranger',
+        });
+        authService.validateUser.mockResolvedValue(undefined);
+        singleTenant.allowsNewAccount.mockResolvedValue(false);
+
+        await expect(
+            useCase.execute(
+                'Stranger',
+                'stranger@example.com',
+                'valid_token',
+                AuthProvider.GITHUB,
+            ),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+
+        expect(signUpUseCase.execute).not.toHaveBeenCalled();
+        expect(authService.login).not.toHaveBeenCalled();
+    });
+
+    it('still provisions the first account, so a workspace can bootstrap', async () => {
+        const { useCase, authService, signUpUseCase, singleTenant } =
+            makeDeps();
+        authService.verifyOAuthProviderEmail.mockResolvedValue({
+            email: 'owner@example.com',
+            name: 'Owner',
+        });
+        authService.validateUser.mockResolvedValue(undefined);
+        singleTenant.allowsNewAccount.mockResolvedValue(true);
+        signUpUseCase.execute.mockResolvedValue({
+            uuid: 'u3',
+            organization: { uuid: 'o3' },
+        });
+        authService.login.mockResolvedValue({
+            accessToken: 'a',
+            refreshToken: 'r',
+        });
+
+        await useCase.execute(
+            'Owner',
+            'owner@example.com',
+            'valid_token',
+            AuthProvider.GITHUB,
+        );
+
+        expect(signUpUseCase.execute).toHaveBeenCalled();
+    });
+
+    // An existing member never reaches the check: `validateUser` already found
+    // them, so the workspace-empty rule cannot lock out the people in it.
+    it('does not consult the rule for an existing member', async () => {
+        const { useCase, authService, singleTenant } = makeDeps();
+        authService.verifyOAuthProviderEmail.mockResolvedValue({
+            email: 'member@example.com',
+            name: 'Member',
+        });
+        authService.validateUser.mockResolvedValue({
+            uuid: 'u4',
+            organization: { uuid: 'o4' },
+        });
+        authService.login.mockResolvedValue({
+            accessToken: 'a',
+            refreshToken: 'r',
+        });
+
+        await useCase.execute(
+            'Member',
+            'member@example.com',
+            'valid_token',
+            AuthProvider.GITHUB,
+        );
+
+        expect(singleTenant.allowsNewAccount).not.toHaveBeenCalled();
     });
 });

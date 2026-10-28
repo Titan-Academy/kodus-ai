@@ -81,6 +81,7 @@ import {
     ScanSearchIcon,
     Settings2Icon,
     ShieldIcon,
+    UsersIcon,
     type LucideIcon,
 } from "lucide-react";
 import { useQueryState } from "nuqs";
@@ -1187,6 +1188,15 @@ const OrganizationGroup = () => {
             href: "/organization/general",
             label: "General",
             icon: CogIcon,
+            visible: canEditOrg,
+        },
+        {
+            // Who is in the workspace and what they may do. This is also the
+            // allow-list sign-in reads: an account the workspace does not have
+            // cannot provision itself (see SingleTenantService.allowsNewAccount).
+            href: "/organization/members",
+            label: "Members",
+            icon: UsersIcon,
             visible: canEditOrg,
         },
         {

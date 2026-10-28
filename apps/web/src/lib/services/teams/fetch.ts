@@ -1,4 +1,5 @@
 import { authorizedFetch } from "@services/fetch";
+import type { UserRole } from "@enums";
 import { axiosAuthorized } from "src/core/utils/axios";
 
 import { TEAMS_PATHS } from ".";
@@ -21,4 +22,26 @@ export const getTeamsWithIntegrations = async (): Promise<
     } catch (error: any) {
         return { error: error.response?.status || "Unknown error" };
     }
+};
+
+/** A member of the workspace team, as the members screen lists them. */
+export type TeamMember = {
+    uuid?: string;
+    userId?: string;
+    name: string;
+    email: string;
+    role: UserRole;
+    teamRole?: string;
+    active: boolean;
+    avatar?: string;
+};
+
+export const getTeamMembers = async (
+    teamId: string,
+): Promise<TeamMember[]> => {
+    const response = await authorizedFetch<TeamMember[]>(
+        TEAMS_PATHS.MEMBERS(teamId),
+    );
+
+    return response ?? [];
 };

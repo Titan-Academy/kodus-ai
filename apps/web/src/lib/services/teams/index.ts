@@ -8,4 +8,6 @@ export const TEAMS_PATHS = {
     DELETE: pathToApiUrl("/team"),
     GET_TEAM_BY_ID: pathToApiUrl("/team/get-by-id"),
     FIRST_CREATED_TEAM: pathToApiUrl("/team/first-created"),
+    MEMBERS: (teamId: string) =>
+        pathToApiUrl(`/team/members?teamId=${encodeURIComponent(teamId)}`),
 } as const;
