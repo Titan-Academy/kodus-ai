@@ -1193,7 +1193,9 @@ const OrganizationGroup = () => {
             href: "/organization/sso",
             label: "SSO",
             icon: ShieldIcon,
-            visible: canEditOrg,
+            // Off by choice here (GitHub OAuth is the only sign-in), not by
+            // tier — `singleTenantRedirects` sends the route itself away too.
+            visible: canEditOrg && !edition.hidesSso,
             locked: ssoLocked,
         },
         {

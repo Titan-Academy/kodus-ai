@@ -43,12 +43,18 @@ export const singleTenantRedirects: ReadonlyArray<{
     prefix: string;
     to: string;
 }> = [
-    // Billing only. The paid *features* (Cockpit, SSO, activity logs, custom
+    // Billing only. The paid *features* (Cockpit, activity logs, custom
     // agents) stay: a free self-hosted install unlocks every one of them,
     // because they run on the operator's own infrastructure. What disappears is
     // the machinery for buying and metering a plan.
     { prefix: "/settings/subscription", to: "/settings" },
     { prefix: "/choose-plan", to: "/settings" },
+    // SAML SSO is switched off here by choice, not by tier: this deployment
+    // authenticates through the GitHub OAuth app, so the SAML configuration
+    // screen is dead weight for the operator. Removing it from the nav alone
+    // would leave the page reachable by URL, so the route redirects too —
+    // which also drops it from the command palette (`isHiddenRoute`).
+    { prefix: "/organization/sso", to: "/organization/general" },
 ];
 
 /**
@@ -84,6 +90,12 @@ export const edition = {
     hidesBilling: isSingleTenant,
     /** No self-service registration: `/sign-up` redirects to `/sign-in`. */
     closedRegistration: isSingleTenant,
+    /**
+     * SAML SSO config screen — off by choice in this deployment, which signs in
+     * through GitHub OAuth. See `singleTenantRedirects` for the route and the
+     * sidebar for the nav entry.
+     */
+    hidesSso: isSingleTenant,
     /**
      * "Kodus as the provider" — routes over Kodus's own upstream accounts and
      * bills the org's prepaid Kodus credits.
