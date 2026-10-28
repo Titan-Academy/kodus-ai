@@ -1,0 +1,126 @@
+name: "Themis: build and publish self-hosted images"
+
+# Builds the stack tt-code-review-themis runs, from THIS commit, and pushes it
+# to GHCR as **private** packages.
+#
+# Why this exists instead of reusing `selfhosted-build-push.yml`: that workflow
+# is the upstream release train (RC tag → full provider × license E2E matrix →
+# promote → GitHub Release). Themis needs none of that — it needs "the images
+# that match the pinned submodule commit", and it re-deploys a handful of times
+# a year from a developer machine.
+#
+# The tag is `sha-<full commit sha>`, so the image and the code are the same
+# fact. tt-code-review-themis pins the same value in `KODUS_IMAGE_TAG`; bumping
+# the submodule and re-running this workflow is the whole upgrade path.
+#
+# Only `linux/amd64` is built: the Themis host is deliberately x86_64 (the
+# upstream arm64 images would run under emulation there, and vice versa).
+#
+# NOT built here: `mcp-manager`. Themis does not run that service.
+
+on:
+    workflow_dispatch:
+    push:
+        branches: [main]
+        # Only rebuild when something that lands in an image changed. A docs or
+        # workflow-only commit does not need a 20-minute build.
+        paths:
+            - "apps/**"
+            - "libs/**"
+            - "docker/**"
+            - "package.json"
+            - "pnpm-lock.yaml"
+            - "pnpm-workspace.yaml"
+            - "tsconfig*.json"
+            - "nest-cli.json"
+            - "webpack.config.js"
+            - "default-kodus-config.yml"
+            - "kodus-config.yml"
+            - "docker-bake.hcl"
+            - ".github/workflows/themis-images.yml"
+
+concurrency:
+    group: themis-images-${{ github.ref }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
+    # Push to GHCR. This is also what makes the packages PRIVATE: a package
+    # published from a workflow starts private, and only an explicit visibility
+    # change in the package settings would make it public.
+    packages: write
+
+env:
+    # Registry namespace. Docker requires a lowercase repository path, so the
+    # org `Titan-Academy` is `titan-academy` here.
+    REGISTRY: ghcr.io/titan-academy
+
+jobs:
+    build:
+        name: Build and push (linux/amd64, self-hosted mode)
+        runs-on: ubuntu-latest
+        timeout-minutes: 90
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Resolve image tag
+              id: tag
+              run: |
+                  set -euo pipefail
+                  # Full SHA on purpose: the parent repo pins this exact string,
+                  # and a full SHA cannot collide.
+                  echo "value=sha-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+            - uses: docker/setup-buildx-action@v3
+
+            - name: Log in to GHCR
+              uses: docker/login-action@v3
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Build and push
+              env:
+                  TAG: ${{ steps.tag.outputs.value }}
+                  # Self-hosted build: API_CLOUD_MODE=false bakes `__CLOUD_MODE__`
+                  # into libs/ee/configs/environment at compile time, which is what
+                  # selects SelfHostedLicenseService (community = fully featured)
+                  # and disables cloud billing. It CANNOT be overridden at runtime.
+                  #
+                  # The registry build cache is a separate PRIVATE package; it is
+                  # what keeps repeat builds from recompiling the deps stages.
+                  CACHE_TYPE: registry
+                  CACHE_REF: ${{ env.REGISTRY }}/kodus-ai-buildcache:themis
+                  API_TAGS: ${{ env.REGISTRY }}/kodus-ai-api:sha-${{ github.sha }}
+                  WEBHOOKS_TAGS: ${{ env.REGISTRY }}/kodus-ai-webhook:sha-${{ github.sha }}
+                  WORKER_TAGS: ${{ env.REGISTRY }}/kodus-ai-worker:sha-${{ github.sha }}
+                  WEB_TAGS: ${{ env.REGISTRY }}/kodus-ai-web:sha-${{ github.sha }}
+                  RABBITMQ_TAGS: ${{ env.REGISTRY }}/kodus-rabbitmq:sha-${{ github.sha }}
+              run: |
+                  set -euo pipefail
+                  docker buildx bake -f docker-bake.hcl \
+                    --set base.args.RELEASE_VERSION="${TAG}" \
+                    --set base.args.API_CLOUD_MODE=false \
+                    --set *.platform=linux/amd64 \
+                    --push \
+                    api webhooks worker web rabbitmq
+
+            - name: Summarise
+              run: |
+                  set -euo pipefail
+                  {
+                    echo "### Images built from \`${GITHUB_SHA}\`"
+                    echo
+                    echo "Set this in the Themis env secret (\`themis/prod/env\`) as \`KODUS_IMAGE_TAG\`:"
+                    echo
+                    echo '```'
+                    echo "KODUS_IMAGE_TAG=sha-${GITHUB_SHA}"
+                    echo '```'
+                    echo
+                    echo "| Image |"
+                    echo "| --- |"
+                    for svc in kodus-ai-api kodus-ai-webhook kodus-ai-worker kodus-ai-web kodus-rabbitmq; do
+                      echo "| \`${REGISTRY}/${svc}:sha-${GITHUB_SHA}\` |"
+                    done
+                  } >> "$GITHUB_STEP_SUMMARY"
