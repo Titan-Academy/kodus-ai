@@ -8,6 +8,7 @@ import type { OrganizationLicense } from "../../subscription/_services/billing/t
  * Allowed:
  *   - cloud paid (subscriptionStatus=active) on Teams or Enterprise plans
  *   - licensed self-hosted on any Enterprise plan
+ *   - free self-hosted — the community edition is fully featured
  *   - trial (treated as Teams-cloud equivalent)
  */
 export function isCockpitTierAllowed(
@@ -24,6 +25,12 @@ export function isCockpitTierAllowed(
             const plan = license.planType ?? "";
             return isEnterprisePlan(plan);
         }
+        // Free self-hosted: the dashboard measures the operator's own reviews
+        // running on their own machine. Nothing is being metered for Kodus, so
+        // there is no tier to fall short of. Mirrors
+        // `libs/ee/license/tier/teams-or-enterprise-tier-policy.ts`.
+        case "self-hosted":
+            return true;
         case "trial":
             return true;
         default:

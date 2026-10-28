@@ -458,13 +458,16 @@ describe('isEnterprisePlan', () => {
         ).toBe(true);
     });
 
-    it('is false for the default branch (e.g. self-hosted CE)', () => {
+    it('is true for free self-hosted (community edition)', () => {
+        // Community self-hosted is fully featured — SSO and activity logs run
+        // on the operator's own infrastructure. Mirrors
+        // `isEnterpriseTierAllowed` in libs/ee.
         expect(
             isEnterprisePlan({
                 valid: true,
                 subscriptionStatus: 'self-hosted',
             } as any),
-        ).toBe(false);
+        ).toBe(true);
     });
 });
 
@@ -546,12 +549,23 @@ describe('isTeamsOrEnterprisePlan', () => {
         ).toBe(true);
     });
 
-    it('is false for the default branch', () => {
+    it('is true for free self-hosted (community edition)', () => {
+        // Same community rule as `isEnterprisePlan`; a stale planType on the
+        // license must not narrow it back down.
         expect(
             isTeamsOrEnterprisePlan({
                 valid: true,
                 subscriptionStatus: 'self-hosted',
                 planType: 'teams_byok',
+            } as any),
+        ).toBe(true);
+    });
+
+    it('is false for an invalid license', () => {
+        expect(
+            isTeamsOrEnterprisePlan({
+                valid: false,
+                subscriptionStatus: 'self-hosted',
             } as any),
         ).toBe(false);
     });

@@ -4,6 +4,10 @@ import { UserStatus } from "@enums";
 import { auth } from "./core/config/auth";
 import { isDateRangeAwarePath } from "./core/utils/date-range-routes";
 import {
+    isSingleTenant,
+    singleTenantRedirectFor,
+} from "./core/utils/edition";
+import {
     CURRENT_PATH_HEADER,
     CURRENT_SEARCH_HEADER,
 } from "./core/utils/headers";
@@ -153,6 +157,29 @@ export const proxy = auth(async (req) => {
         return NextResponse.redirect(new URL("/settings", req.url), {
             status: 302,
         });
+    }
+
+    // Single-tenant deployment (WEB_SINGLE_TENANT): registration is closed and
+    // the paid surfaces are gone. Handled here rather than per page so a hidden
+    // destination is unreachable by every path — a client-side navigation, a
+    // bookmark, or a URL typed by hand — and so the list of what replaced what
+    // lives in one place (`core/utils/edition.ts`).
+    if (isSingleTenant) {
+        // Reached only when unauthenticated: an authenticated visitor is
+        // already sent to /settings by the authPaths rule above.
+        if (pathname === "/sign-up") {
+            return NextResponse.redirect(new URL("/sign-in", req.url), {
+                status: 302,
+            });
+        }
+
+        const replacement = singleTenantRedirectFor(pathname);
+
+        if (replacement) {
+            return NextResponse.redirect(new URL(replacement, req.url), {
+                status: 302,
+            });
+        }
     }
 
     return handleAuthenticated(req, pathname, session, next);

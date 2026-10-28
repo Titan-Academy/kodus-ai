@@ -89,6 +89,7 @@ import { useAllTeams } from "src/core/providers/all-teams-context";
 import { useSelectedTeamId } from "src/core/providers/selected-team-context";
 import { TEAM_STATUS } from "src/core/types";
 import { cn } from "src/core/utils/components";
+import { edition } from "src/core/utils/edition";
 import { middleEllipsis } from "src/core/utils/middle-ellipsis";
 import {
     hasUnsavedChanges,
@@ -418,7 +419,12 @@ export const AppSidebar = ({
                             </div>
                         </ErrorBoundary>
                     )}
-                    <SidebarPlanStatus collapsed={showRail} />
+                    {/* The plan panel is a link to /settings/subscription,
+                        which a single-tenant deployment removes — keeping it
+                        would leave a dead entry at the foot of the rail. */}
+                    {!edition.hidesBilling && (
+                        <SidebarPlanStatus collapsed={showRail} />
+                    )}
                     {!isNarrow && (
                         <RailTooltip label="Expand sidebar">
                             <button
@@ -1213,7 +1219,7 @@ const OrganizationGroup = () => {
             href: "/settings/subscription",
             label: "Subscription",
             icon: CreditCardIcon,
-            visible: canReadBilling,
+            visible: canReadBilling && !edition.hidesBilling,
         },
         {
             href: "/user-logs",

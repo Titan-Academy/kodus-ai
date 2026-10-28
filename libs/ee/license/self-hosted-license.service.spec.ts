@@ -1,3 +1,4 @@
+import { SubscriptionStatus } from './interfaces/license.interface';
 import { SelfHostedLicenseService } from './self-hosted-license.service';
 
 /**
@@ -110,13 +111,27 @@ describe('SelfHostedLicenseService.validateOrganizationLicense', () => {
     it('validates each organization against its own key', async () => {
         const { svc } = makeService({ 'org-licensed': 'jwt' });
 
-        expect(
-            (await svc.validateOrganizationLicense(org('org-licensed'))).valid,
-        ).toBe(true);
-        expect(
-            (await svc.validateOrganizationLicense(org('org-without-key')))
-                .valid,
-        ).toBe(false);
+        // The licensed organization reads its key...
+        const licensed = await svc.validateOrganizationLicense(
+            org('org-licensed'),
+        );
+        expect(licensed.valid).toBe(true);
+        expect(licensed.subscriptionStatus).toBe(
+            SubscriptionStatus.LICENSED_SELF_HOSTED,
+        );
+
+        // ...and the one without a key is community, not invalid: a free
+        // self-hosted install is fully featured, so "no key" must not read as
+        // "no access". Per-organization isolation is what this guards — the
+        // community answer must not be the licensed organization's result.
+        const community = await svc.validateOrganizationLicense(
+            org('org-without-key'),
+        );
+        expect(community).toEqual({
+            valid: true,
+            subscriptionStatus: SubscriptionStatus.SELF_HOSTED,
+        });
+        expect(community.planType).toBeUndefined();
     });
 
     it('reuses a result for the same organization', async () => {

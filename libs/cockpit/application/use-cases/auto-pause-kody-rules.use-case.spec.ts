@@ -197,9 +197,13 @@ describe('AutoPauseKodyRulesUseCase', () => {
         });
 
         it('skips an organization outside the Cockpit tier', async () => {
+            // A cloud plan the Cockpit isn't sold to. (`self-hosted` used to
+            // stand in here, but community self-hosted is now inside the tier
+            // — see the test below.)
             licenseService.validateOrganizationLicense.mockResolvedValue({
                 valid: true,
-                subscriptionStatus: 'self-hosted',
+                subscriptionStatus: 'active',
+                planType: 'free_byok',
             });
 
             const result = await useCase.executeForOrganization(ORG, NOW);
@@ -208,6 +212,20 @@ describe('AutoPauseKodyRulesUseCase', () => {
             expect(
                 kodyRulesService.findByOrganizationId,
             ).not.toHaveBeenCalled();
+        });
+
+        it('does not skip a community self-hosted organization', async () => {
+            // Free self-hosting is fully featured: the dashboard measures
+            // reviews running on the operator's own machine.
+            licenseService.validateOrganizationLicense.mockResolvedValue({
+                valid: true,
+                subscriptionStatus: 'self-hosted',
+            });
+            givenRules([rule('r1')]);
+
+            const result = await useCase.executeForOrganization(ORG, NOW);
+
+            expect(result.skipped).not.toBe('tier');
         });
 
         it('skips without reading usage when the setting is off everywhere', async () => {

@@ -1,10 +1,12 @@
 import { Suspense } from "react";
 import { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { Heading } from "@components/ui/heading";
 import { SvgKodus } from "@components/ui/icons/SvgKodus";
 import { Link } from "@components/ui/link";
 import { Page } from "@components/ui/page";
 import { ScrollArea } from "@components/ui/scroll-area";
+import { edition } from "src/core/utils/edition";
 
 import { RegisterPageContent } from "../components/register-page-content";
 
@@ -13,6 +15,14 @@ export const metadata: Metadata = {
 };
 
 export default function RegisterPage() {
+    // Closed registration. The middleware (`proxy.ts`) already redirects an
+    // unauthenticated visitor away from this path; this is the second half of
+    // the pair, so the screen stays unreachable if the middleware is bypassed
+    // (a direct server render, a future route-matcher change).
+    if (edition.closedRegistration) {
+        redirect("/sign-in");
+    }
+
     return (
         <Page.Root className="mx-auto flex max-h-screen flex-row overflow-hidden p-6">
             <div className="bg-card-lv1 flex flex-10 flex-col justify-center gap-10 rounded-3xl p-12">

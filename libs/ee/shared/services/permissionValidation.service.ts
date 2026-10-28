@@ -908,9 +908,20 @@ export class PermissionValidationService {
                 return false;
             }
 
-            // Self-hosted without license (CE mode): limit resources
-            if (!this.isCloud) {
-                return true;
+            // Free self-hosted (community): don't limit either.
+            //
+            // The caps this gate drives exist to meter Kodus-hosted usage —
+            // model inference, review volume — on infrastructure Kodus pays
+            // for. A self-hosted operator runs the work on their own machines
+            // and brings their own model keys, so capping them charges for
+            // something nobody is buying. Keeping CE on the free tier only
+            // meant rules paused past the cap and MCP plugins silently
+            // skipped during reviews.
+            if (
+                !this.isCloud &&
+                validation.subscriptionStatus === 'self-hosted'
+            ) {
+                return false;
             }
 
             const planType = validation?.planType;
@@ -1257,6 +1268,13 @@ export class PermissionValidationService {
 
             if (validation.subscriptionStatus === 'trial') {
                 return 'trial';
+            }
+
+            // Free self-hosted (community): unrestricted imports, same reason
+            // as `shouldLimitResources` — the limit meters Kodus-hosted
+            // infrastructure, which a self-hosted install does not use.
+            if (validation.subscriptionStatus === 'self-hosted') {
+                return 'paid';
             }
 
             if (this.identifyPlanType(validation.planType) === PlanType.FREE) {

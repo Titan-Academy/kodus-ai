@@ -66,6 +66,8 @@ export default function RootLayout({ children }: React.PropsWithChildren) {
         ruleFilesDocs: process.env.WEB_RULE_FILES_DOCS ?? "",
         releaseVersion: process.env.RELEASE_VERSION ?? "",
         nodeEnv: process.env.WEB_NODE_ENV ?? "",
+        singleTenant:
+            (process.env.WEB_SINGLE_TENANT ?? "").toLowerCase() === "true",
         apiPublicUrl: getApiPublicUrl(),
     };
 

@@ -25,6 +25,7 @@ import {
     ITeamMemberService,
     TEAM_MEMBERS_SERVICE_TOKEN,
 } from '@libs/organization/domain/teamMembers/contracts/teamMembers.service.contracts';
+import { SingleTenantService } from '@libs/identity/infrastructure/adapters/services/single-tenant.service';
 import { IUser } from '@libs/identity/domain/user/interfaces/user.interface';
 import { UserEntity } from '@libs/identity/domain/user/entities/user.entity';
 import { AuthProvider } from '@libs/core/domain/enums';
@@ -53,6 +54,7 @@ export class AuthService implements IAuthService {
         private readonly userRepository: IUserRepository,
         @Inject(TEAM_MEMBERS_SERVICE_TOKEN)
         private readonly teamMemberService: ITeamMemberService,
+        private readonly singleTenant: SingleTenantService,
     ) {
         this.jwtConfig = this.configService.get<JWT>('jwtConfig');
     }
@@ -72,6 +74,30 @@ export class AuthService implements IAuthService {
         authProvider: AuthProvider,
         authDetails?: any,
     ): Promise<any> {
+        // Single-tenant deployments serve exactly one organization. Every
+        // authentication path — credentials, OAuth, SAML SSO, the CLI device
+        // flow — funnels through here, so this is the one place a stray
+        // account from another organization (an imported database, a shared
+        // user table) can be turned away before it is handed a token.
+        if (
+            !(await this.singleTenant.allowsOrganization(
+                userEntity?.organization?.uuid,
+            ))
+        ) {
+            this.logger.warn({
+                message:
+                    'Rejected login from outside the single-tenant organization',
+                context: AuthService.name,
+                metadata: {
+                    userId: userEntity?.uuid,
+                    organizationId: userEntity?.organization?.uuid,
+                    authProvider,
+                },
+            });
+
+            throw new UnauthorizedException('api.users.unauthorized');
+        }
+
         const teamMember = await this.teamMemberService.findOne({
             user: { uuid: userEntity?.uuid },
             organization: { uuid: userEntity?.organization?.uuid },

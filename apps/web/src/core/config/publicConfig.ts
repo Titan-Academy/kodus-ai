@@ -30,6 +30,13 @@ export type PublicConfig = {
     // shared-cookie domain without reading process.env in the browser.
     nodeEnv: string;
 
+    /**
+     * Single-tenant (private) deployment. Client components read this to hide
+     * the paid surfaces and the sign-up screens — see `core/utils/edition.ts`.
+     * Comes from `WEB_SINGLE_TENANT`; the api half is `API_SINGLE_TENANT`.
+     */
+    singleTenant: boolean;
+
     apiPublicUrl: string;
 };
 // Note: WEB_TERMS_AND_CONDITIONS has no client consumer yet, but it's

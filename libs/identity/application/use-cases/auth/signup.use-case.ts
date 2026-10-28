@@ -32,6 +32,7 @@ import { TeamMemberRole } from '@libs/organization/domain/teamMembers/enums/team
 import { CreateProfileUseCase } from '../profile/create.use-case';
 import { CreateTeamUseCase } from '@libs/organization/application/use-cases/team/create.use-case';
 import { SignUpDTO } from '@libs/identity/dtos/create-user-organization.dto';
+import { SingleTenantService } from '@libs/identity/infrastructure/adapters/services/single-tenant.service';
 
 export interface SignUpOptions {
     preVerified?: boolean;
@@ -53,6 +54,7 @@ export class SignUpUseCase implements IUseCase {
         private readonly createTeamUseCase: CreateTeamUseCase,
         private readonly emailService: EmailService,
         private readonly telemetry: TelemetryService,
+        private readonly singleTenant: SingleTenantService,
     ) {}
 
     public async execute(
@@ -73,8 +75,17 @@ export class SignUpUseCase implements IUseCase {
                 throw new DuplicateRecordException('User already exists');
             }
 
+            const singleTenantEnabled = this.singleTenant.enabled;
+            // A single-tenant deployment is itself the authority on who may
+            // hold an account: there is no emailed confirmation to wait for
+            // and no admin to approve, so the account is trusted on creation.
+            // Without this the team member row is created inactive
+            // (`status: isOwner || preVerified` below) and the user never
+            // appears in the workspace.
+            const preVerified = !!options?.preVerified || singleTenantEnabled;
+
             const status =
-                options?.preVerified || !environment.API_CLOUD_MODE
+                preVerified || !environment.API_CLOUD_MODE
                     ? STATUS.ACTIVE
                     : STATUS.PENDING;
             const user: Omit<IUser, 'uuid'> = {
@@ -87,7 +98,26 @@ export class SignUpUseCase implements IUseCase {
                 },
             };
 
-            if (organizationId && organizationId.length > 0) {
+            if (singleTenantEnabled) {
+                // Anyone the identity provider verifies joins the one pinned
+                // organization. The inbound `organizationId` is deliberately
+                // ignored: honouring it would let a caller place an account in
+                // an organization of their choosing.
+                const organization =
+                    await this.singleTenant.ensureOrganization();
+
+                if (!organization) {
+                    throw new Error(
+                        'Single-tenant organization could not be resolved',
+                    );
+                }
+
+                user.organization = organization;
+                user.role = await this.resolveSingleTenantRole(
+                    organization.uuid,
+                );
+                user.status = STATUS.ACTIVE;
+            } else if (organizationId && organizationId.length > 0) {
                 user.organization = await this.organizationService.findOne({
                     uuid: organizationId,
                 });
@@ -145,6 +175,19 @@ export class SignUpUseCase implements IUseCase {
                     },
                 });
 
+                // A pinned organization can predate any team in it (created by
+                // an earlier deployment, or emptied by an admin), and a joiner
+                // is not allowed to create one through the owner branch. Give
+                // the organization a default team so the join can complete.
+                if (!team && singleTenantEnabled) {
+                    team = await this.createTeamUseCase.execute({
+                        teamName: `${createdUser.organization.name} - team`,
+                        organizationId: createdUser.organization.uuid,
+                        organizationName: createdUser.organization.name,
+                        actorUserId: createdUser.uuid,
+                    });
+                }
+
                 if (!team) {
                     throw new Error('Team not found for the organization');
                 }
@@ -158,7 +201,7 @@ export class SignUpUseCase implements IUseCase {
                 teamRole: isOwner
                     ? TeamMemberRole.TEAM_LEADER
                     : TeamMemberRole.MEMBER,
-                status: isOwner || !!options?.preVerified,
+                status: isOwner || preVerified,
             });
 
             if (!member) {
@@ -201,6 +244,25 @@ export class SignUpUseCase implements IUseCase {
         });
 
         return !!previousUser;
+    }
+
+    /**
+     * The first account in the pinned organization owns it, everyone after
+     * that joins as a contributor.
+     *
+     * Without this a single-tenant deployment could end up with no owner at
+     * all — every account a plain contributor, and nobody able to configure
+     * the workspace. The owner can promote further members from the
+     * organization settings.
+     */
+    private async resolveSingleTenantRole(
+        organizationId: string,
+    ): Promise<Role> {
+        const members = await this.usersService.find({
+            organization: { uuid: organizationId },
+        });
+
+        return members.length === 0 ? Role.OWNER : Role.CONTRIBUTOR;
     }
 
     private async checkIfOrganizationAlreadyExists(

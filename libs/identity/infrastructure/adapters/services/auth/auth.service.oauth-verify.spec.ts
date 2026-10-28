@@ -23,6 +23,7 @@ describe('AuthService.verifyOAuthProviderEmail', () => {
             {} as any,
             {} as any,
             {} as any,
+            { enabled: false, allowsOrganization: async () => true } as any, // singleTenant
         );
     };
 

@@ -55,6 +55,7 @@ import {
     triggerNavigationBlock,
 } from "src/core/utils/navigation-guard";
 import { hasPermission } from "src/core/utils/permission-map";
+import { isHiddenRoute } from "src/core/utils/edition";
 import { useFetch } from "src/core/utils/reactQuery";
 import {
     GATE_PLAN_LABEL,
@@ -365,13 +366,17 @@ export const CommandPalette = ({
         () =>
             PAGES.filter(
                 (page) =>
-                    !page.permission ||
-                    hasPermission({
-                        permissions,
-                        organizationId: organizationId!,
-                        action: page.permission.action,
-                        resource: page.permission.resource,
-                    }),
+                    // A destination this deployment removed is not listed at
+                    // all — the page behind it redirects, so offering it would
+                    // only bounce the viewer somewhere else.
+                    !isHiddenRoute(page.href) &&
+                    (!page.permission ||
+                        hasPermission({
+                            permissions,
+                            organizationId: organizationId!,
+                            action: page.permission.action,
+                            resource: page.permission.resource,
+                        })),
             ),
         [permissions, organizationId],
     );

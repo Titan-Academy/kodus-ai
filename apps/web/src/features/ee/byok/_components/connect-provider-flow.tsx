@@ -16,6 +16,7 @@ import {
     SparklesIcon,
 } from "lucide-react";
 import { cn } from "src/core/utils/components";
+import { edition } from "src/core/utils/edition";
 
 import { isPlatformFundedProvider } from "../_data/platform-funded";
 import { PROVIDER_LABELS } from "../_data/provider-labels";
@@ -258,7 +259,13 @@ export function ConnectProviderFlow({
     // Kodus leads the grid: it is the zero-setup path (no key, pay with
     // credits), and the registry order would otherwise bury it last.
     const mainProviders = [
-        ...providers.filter((p) => isPlatformFundedProvider(p.id)),
+        // "Kodus as the provider" runs on prepaid Kodus credits bought from
+        // Kodus — a billing relationship a private self-hosted install does not
+        // have. Left out of the picker there, even though the feature tiers it
+        // sits beside are unlocked.
+        ...(edition.hidesKodusCreditProvider
+            ? []
+            : providers.filter((p) => isPlatformFundedProvider(p.id))),
         ...providers.filter(
             (p) => !isCustomProvider(p.id) && !isPlatformFundedProvider(p.id),
         ),

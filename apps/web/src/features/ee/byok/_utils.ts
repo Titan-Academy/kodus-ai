@@ -130,9 +130,10 @@ export const isBYOKSubscriptionPlan = (license: OrganizationLicense) => {
 export const isEnterprisePlan = (license: OrganizationLicense): boolean => {
     // Mirror of `isEnterpriseTierAllowed` in
     // `libs/ee/license/tier/enterprise-tier-policy.ts` — keep aligned.
-    // CE self-hosted (no key) is modeled here as
-    // `{ valid: true, subscriptionStatus: "self-hosted" }` and falls
-    // into the `default` branch.
+    // CE self-hosted (no key) is modeled as
+    // `{ valid: true, subscriptionStatus: "self-hosted" }` and is fully
+    // featured: the features behind this gate run on the operator's own
+    // infrastructure.
     if (!license.valid) return false;
 
     switch (license.subscriptionStatus) {
@@ -141,6 +142,7 @@ export const isEnterprisePlan = (license: OrganizationLicense): boolean => {
             const plan = license.planType ?? "";
             return plan.startsWith("enterprise_") || plan === "enterprise";
         }
+        case "self-hosted":
         case "trial":
             return true;
         default:
@@ -169,6 +171,8 @@ export const isTeamsOrEnterprisePlan = (
             return isTeams || isEnterprise;
         case "licensed-self-hosted":
             return isEnterprise;
+        // Free self-hosted is fully featured — see `isEnterprisePlan` above.
+        case "self-hosted":
         case "trial":
             return true;
         default:

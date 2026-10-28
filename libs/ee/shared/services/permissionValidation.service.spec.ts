@@ -277,3 +277,56 @@ describe('PermissionValidationService — plan-type gating (pure decisions)', ()
         });
     });
 });
+
+// Free self-hosting (community edition) is fully featured. Both caps below
+// meter work Kodus pays for on cloud — model inference, review volume — and a
+// self-hosted install runs that work on its own machines with its own keys.
+// Regression here is silent: rules get paused past the cap and MCP plugins are
+// skipped during reviews with nothing on screen saying why.
+describe('PermissionValidationService — free self-hosted is uncapped', () => {
+    const orgTeam = { organizationId: 'org-1', teamId: 'team-1' } as any;
+
+    const makeService = (license: Record<string, unknown>) => {
+        const licenseService = {
+            validateOrganizationLicense: jest.fn().mockResolvedValue(license),
+            getAllUsersWithLicense: jest.fn().mockResolvedValue([]),
+        };
+        const orgParams = { findByKey: jest.fn() };
+        return new PermissionValidationService(
+            licenseService as any,
+            orgParams as any,
+        );
+    };
+
+    const COMMUNITY = {
+        valid: true,
+        subscriptionStatus: 'self-hosted',
+    };
+
+    describe('shouldLimitResources (rules cap + MCP plugin cap)', () => {
+        it('does not limit a community self-hosted install', async () => {
+            const svc = makeService(COMMUNITY);
+            expect(await svc.shouldLimitResources(orgTeam)).toBe(false);
+        });
+
+        it('still limits an org whose license is invalid', async () => {
+            const svc = makeService({
+                valid: false,
+                subscriptionStatus: 'expired',
+            });
+            expect(await svc.shouldLimitResources(orgTeam)).toBe(true);
+        });
+    });
+
+    describe('resolveGlobalRulesImportTier', () => {
+        it('grants unrestricted imports to a community self-hosted install', async () => {
+            const svc = makeService(COMMUNITY);
+            expect(await svc.resolveGlobalRulesImportTier(orgTeam)).toBe('paid');
+        });
+
+        it('keeps an org with no valid license on free', async () => {
+            const svc = makeService({ valid: false });
+            expect(await svc.resolveGlobalRulesImportTier(orgTeam)).toBe('free');
+        });
+    });
+});

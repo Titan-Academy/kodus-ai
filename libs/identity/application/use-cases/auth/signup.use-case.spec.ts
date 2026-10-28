@@ -20,18 +20,29 @@ describe('SignUpUseCase — user status when joining an existing org', () => {
             },
             usersService: {
                 count: jest.fn().mockResolvedValue(0),
+                find: jest.fn().mockResolvedValue([]),
                 register: jest
                     .fn()
-                    .mockImplementation(async (u) => ({
-                        ...u,
-                        uuid: 'user-1',
-                        organization: org,
-                        toObject: () => ({
+                    .mockImplementation(async (u) => {
+                        // A persisted user keeps the organization it was
+                        // registered with; only a payload that carries a bare
+                        // `{name}` (the create-your-own-org branch) falls back
+                        // to the fixture organization.
+                        const organization = u.organization?.uuid
+                            ? u.organization
+                            : org;
+
+                        return {
                             ...u,
                             uuid: 'user-1',
-                            organization: org,
-                        }),
-                    })),
+                            organization,
+                            toObject: () => ({
+                                ...u,
+                                uuid: 'user-1',
+                                organization,
+                            }),
+                        };
+                    }),
             },
             teamMembersService: {
                 create: jest.fn().mockResolvedValue({ uuid: 'tm-1' }),
@@ -45,6 +56,10 @@ describe('SignUpUseCase — user status when joining an existing org', () => {
             },
             emailService: { createContact: jest.fn() },
             telemetry: { userSignedUp: jest.fn() },
+            singleTenant: {
+                enabled: false,
+                ensureOrganization: jest.fn(),
+            },
         };
     };
 
@@ -58,6 +73,7 @@ describe('SignUpUseCase — user status when joining an existing org', () => {
             deps.createTeamUseCase as any,
             deps.emailService as any,
             deps.telemetry as any,
+            deps.singleTenant as any,
         );
 
     const runWith = async (
@@ -176,6 +192,100 @@ describe('SignUpUseCase — user status when joining an existing org', () => {
                 password: 'x',
             } as any);
             expect(membershipStatusFromCreate(deps)).toBe(true);
+        });
+    });
+
+    describe('single-tenant (private) deployment', () => {
+        // One installation, one organization: whoever the identity provider
+        // verifies joins the pinned organization, no matter what the request
+        // asks for, and the account is trusted on creation.
+        const PINNED_ORG = { uuid: 'pinned-org', name: 'Acme' };
+
+        const runSingleTenant = async (
+            deps: ReturnType<typeof buildDeps>,
+            payload: Record<string, unknown> = {},
+        ) => {
+            deps.singleTenant.enabled = true;
+            deps.singleTenant.ensureOrganization.mockResolvedValue(PINNED_ORG);
+            await buildUseCase(deps).execute({
+                email: 'new@acme.com',
+                name: 'New User',
+                password: 'x',
+                ...payload,
+            } as any);
+            return deps.usersService.register.mock.calls[0][0];
+        };
+
+        it('places the account in the pinned organization', async () => {
+            const deps = buildDeps();
+            const registered = await runSingleTenant(deps);
+
+            expect(deps.singleTenant.ensureOrganization).toHaveBeenCalled();
+            expect(registered.organization).toEqual(PINNED_ORG);
+            expect(registered.status).toBe(STATUS.ACTIVE);
+        });
+
+        it('ignores an inbound organizationId — a caller cannot pick the org', async () => {
+            const deps = buildDeps();
+            const registered = await runSingleTenant(deps, {
+                organizationId: 'some-other-org',
+            });
+
+            expect(
+                deps.organizationService.findOne,
+            ).not.toHaveBeenCalledWith({ uuid: 'some-other-org' });
+            expect(registered.organization).toEqual(PINNED_ORG);
+        });
+
+        it('never creates an organization of its own', async () => {
+            const deps = buildDeps();
+            await runSingleTenant(deps);
+
+            expect(
+                deps.organizationService.createOrganizationWithTenant,
+            ).not.toHaveBeenCalled();
+        });
+
+        it('first member of the organization becomes its owner', async () => {
+            const deps = buildDeps();
+            deps.usersService.find.mockResolvedValue([]);
+            const registered = await runSingleTenant(deps);
+
+            expect(registered.role).toBe(Role.OWNER);
+        });
+
+        it('everyone after the first joins as a contributor', async () => {
+            const deps = buildDeps();
+            deps.usersService.find.mockResolvedValue([{ uuid: 'user-0' }]);
+            const registered = await runSingleTenant(deps);
+
+            expect(registered.role).toBe(Role.CONTRIBUTOR);
+        });
+
+        it('joiner membership is ACTIVE without an explicit preVerified', async () => {
+            // The deployment itself vouches for the account, so a contributor
+            // who joins must still land in the workspace member list.
+            const deps = buildDeps();
+            deps.usersService.find.mockResolvedValue([{ uuid: 'user-0' }]);
+            await runSingleTenant(deps);
+
+            expect(deps.teamMembersService.create.mock.calls[0][0].status).toBe(
+                true,
+            );
+        });
+
+        it('creates a default team when the pinned organization has none', async () => {
+            const deps = buildDeps();
+            deps.usersService.find.mockResolvedValue([{ uuid: 'user-0' }]);
+            deps.teamService.findOne.mockResolvedValue(null);
+
+            await runSingleTenant(deps);
+
+            expect(deps.createTeamUseCase.execute).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    organizationId: PINNED_ORG.uuid,
+                }),
+            );
         });
     });
 });

@@ -3,9 +3,13 @@
 import { useMemo } from "react";
 import { useSubscriptionStatus } from "src/features/ee/subscription/_hooks/use-subscription-status";
 
-// Free/CE cap on simultaneously-running MCP plugins. Mirrors the backend
+// Cloud Free cap on simultaneously-running MCP plugins. Mirrors the backend
 // enforcement in libs/mcp-server/services/mcp-manager.service.ts (slice on
 // getConnections, driven by shouldLimitResources).
+//
+// Free *self-hosted* is not capped: `shouldLimitResources` returns false for an
+// unlicensed self-hosted install, because the plugins run on the operator's own
+// infrastructure. Only a cloud Free org sits under this number.
 export const MCP_PLUGINS_FREE_LIMIT = 3;
 
 export const useMCPPluginsLimit = (installedCount: number) => {
@@ -35,8 +39,7 @@ export const useMCPPluginsLimit = (installedCount: number) => {
 
         if (
             !subscription.valid ||
-            subscription.status === "free" ||
-            subscription.status === "self-hosted"
+            subscription.status === "free"
         )
             return {
                 total,
@@ -47,6 +50,10 @@ export const useMCPPluginsLimit = (installedCount: number) => {
                 planType,
             };
 
+        // Free self-hosted (community) is uncapped: the cap meters plugins
+        // running on Kodus infrastructure, and a self-hosted install runs them
+        // on its own. Mirrors `shouldLimitResources` in
+        // `libs/ee/shared/services/permissionValidation.service.ts`.
         return {
             total,
             canInstallMore: true,

@@ -17,6 +17,7 @@ import { AUTH_REPOSITORY_TOKEN } from '@libs/identity/domain/auth/contracts/auth
 import { AUTH_SERVICE_TOKEN } from '@libs/identity/domain/auth/contracts/auth.service.contracts';
 import { CLI_AUTH_SESSION_REPOSITORY_TOKEN } from '@libs/identity/domain/cli-auth/contracts/cli-auth-session.repository';
 import { AuthService } from '@libs/identity/infrastructure/adapters/services/auth/auth.service';
+import { SingleTenantService } from '@libs/identity/infrastructure/adapters/services/single-tenant.service';
 import { JwtStrategy } from '@libs/identity/infrastructure/adapters/services/auth/jwt-auth.strategy';
 import { CliAuthSessionRepository } from '../infrastructure/adapters/repositories/cli-auth-session.repository';
 import { CliAuthSessionModel } from '../infrastructure/adapters/repositories/schemas/cli-auth-session.model';
@@ -66,6 +67,7 @@ import { NotificationModule } from '@libs/notifications/modules/notification.mod
             provide: AUTH_SERVICE_TOKEN,
             useClass: AuthService,
         },
+        SingleTenantService,
         // CLI auth (browser/device flows)
         CliAuthSessionRepository,
         {
@@ -82,6 +84,7 @@ import { NotificationModule } from '@libs/notifications/modules/notification.mod
         AUTH_SERVICE_TOKEN,
         JwtModule,
         AUTH_REPOSITORY_TOKEN,
+        SingleTenantService,
         ...AuthUseCases,
         InitiateCliLoginUseCase,
         InitiateCliDeviceLoginUseCase,

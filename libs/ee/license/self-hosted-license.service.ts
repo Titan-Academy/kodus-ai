@@ -72,30 +72,43 @@ export class SelfHostedLicenseService implements ILicenseService {
         try {
             const token = await this.getLicenseKey(organizationAndTeamData);
 
+            // No key is the normal state of a free self-hosted install: this
+            // service is only bound outside cloud mode. Report it as a valid
+            // community (`self-hosted`) license so the tier policies grant the
+            // product's paid surfaces instead of locking every one of them —
+            // a self-hosted operator running on their own infrastructure
+            // brings their own model keys, and the plan gates exist to charge
+            // for Kodus-hosted inference, not to withhold the UI.
             if (!token) {
-                return { valid: false };
+                return this.communityLicense();
             }
 
             const payload = this.verifyAndDecode(token);
 
+            // An unreadable key must never be worse than no key: fall back to
+            // the community license rather than locking an install whose
+            // operator pasted something malformed.
             if (!payload) {
-                return { valid: false };
+                this.logger.warn({
+                    message:
+                        'Self-hosted license key could not be verified; falling back to the community license',
+                    context: SelfHostedLicenseService.name,
+                });
+                return this.communityLicense();
             }
 
             // Check expiration
             const now = Math.floor(Date.now() / 1000);
             if (payload.exp && payload.exp < now) {
                 this.logger.warn({
-                    message: 'Self-hosted license key has expired',
+                    message:
+                        'Self-hosted license key has expired; falling back to the community license',
                     context: SelfHostedLicenseService.name,
                     metadata: {
                         expiredAt: new Date(payload.exp * 1000).toISOString(),
                     },
                 });
-                return {
-                    valid: false,
-                    subscriptionStatus: SubscriptionStatus.EXPIRED,
-                };
+                return this.communityLicense();
             }
 
             const result: OrganizationLicenseValidationResult = {
@@ -430,6 +443,19 @@ export class SelfHostedLicenseService implements ILicenseService {
      */
     clearCache(): void {
         this.cache.clear();
+    }
+
+    /**
+     * The unlicensed self-hosted baseline: valid, `self-hosted`, no plan and no
+     * seat ceiling. Every tier policy treats this status as "allowed", which is
+     * what makes a free self-hosted install fully featured instead of a
+     * padlocked demo.
+     */
+    private communityLicense(): OrganizationLicenseValidationResult {
+        return {
+            valid: true,
+            subscriptionStatus: SubscriptionStatus.SELF_HOSTED,
+        };
     }
 
     private async getLicenseKey(

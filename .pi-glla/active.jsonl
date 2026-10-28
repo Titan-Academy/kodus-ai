@@ -1,0 +1,5 @@
+{"type":"session_rebound","value":{"reason":"startup"},"at":"2026-10-28T17:27:02.536Z"}
+{"type":"session_waiting_for_load","value":{"reason":"startup"},"at":"2026-10-28T17:27:02.543Z"}
+{"type":"state","value":{"goal":null,"list":[],"loop":null,"mainModelRecovery":null,"lastModelRef":"deepseek/deepseek-flash","lastCompactionAt":null,"postCompactRecovery":null,"supervisorPausedAt":null,"loadHoldAt":null,"lastOutcome":null},"at":"2026-10-28T17:27:54.591Z"}
+{"type":"context_usage_sample","value":{"goalId":null,"provider":"deepseek","model":"deepseek-flash","providerUsage":{"inputTokens":138,"outputTokens":517,"cacheReadTokens":78464,"cacheWriteTokens":0,"totalTokens":79119},"contextUsage":{"tokens":79119,"contextWindow":1000000,"percent":7.911899999999999}},"at":"2026-10-28T17:34:10.148Z"}
+{"type":"context_usage_sample","value":{"goalId":null,"provider":"deepseek","model":"deepseek-flash","providerUsage":{"inputTokens":620,"outputTokens":1213,"cacheReadTokens":211456,"cacheWriteTokens":0,"totalTokens":213289},"contextUsage":{"tokens":213289,"contextWindow":1000000,"percent":21.3289}},"at":"2026-10-28T17:54:00.834Z"}

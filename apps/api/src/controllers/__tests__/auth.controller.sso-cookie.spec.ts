@@ -58,6 +58,8 @@ describe('AuthController.ssoCallback — SSO handoff cookie Domain', () => {
             ssoLoginUseCase as any,
             {} as any, // ssoCheckUseCase
             ssoTestSessionService as any,
+            {} as any, // createHelpdeskTokenUseCase
+            { enabled: false } as any, // singleTenant
         );
     });
 

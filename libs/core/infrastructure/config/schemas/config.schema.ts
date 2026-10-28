@@ -31,4 +31,14 @@ export const configSchema = Joi.object({
     REVIEW_RESPONSE_P95_CRITICAL_MS: Joi.number().optional().default(1200000),
     WEBHOOK_FAILURE_THRESHOLD_PERCENT: Joi.number().optional().default(10),
     WEBHOOK_FAILURE_WINDOW_MINUTES: Joi.number().optional().default(30),
+    // Single-tenant (private) deployment: one organization, closed
+    // registration. Read by `SingleTenantService`.
+    API_SINGLE_TENANT: Joi.string()
+        .valid('true', 'false')
+        .optional()
+        .default('false'),
+    API_SINGLE_TENANT_ORGANIZATION_NAME: Joi.string()
+        .optional()
+        .allow('')
+        .default('Kodus'),
 });

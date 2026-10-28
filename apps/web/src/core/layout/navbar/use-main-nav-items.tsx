@@ -82,6 +82,7 @@ export const useMainNavItems = () => {
                 // Always visible: below the allowed tier the route renders a
                 // blurred preview with an upgrade CTA (apps/web/.../cockpit/
                 // layout.tsx), so the nav item shows a lock instead of hiding.
+                // Free self-hosted passes the tier check, so it never locks.
                 visible: true,
                 icon: GaugeIcon,
                 badge: isCockpitTierAllowed(

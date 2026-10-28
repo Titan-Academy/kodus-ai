@@ -12,12 +12,11 @@ import {
  * Allowed:
  *   - cloud paid (`active`) on enterprise plans
  *   - licensed self-hosted with `plan: enterprise*` in the signed JWT
+ *   - free self-hosted (`self-hosted`) — community installs are fully featured
  *   - trial (treated as enterprise preview)
  *
  * Blocked:
  *   - invalid / canceled / expired / payment_failed
- *   - CE self-hosted (no key) — `validateOrganizationLicense` returns
- *     `{ valid: false }`, caught by the early short-circuit
  *   - cloud paid on non-enterprise plans
  *   - licensed self-hosted with a non-enterprise `plan` in the JWT
  */
@@ -34,6 +33,11 @@ export function isEnterpriseTierAllowed(
             return isEnterprise;
         case SubscriptionStatus.LICENSED_SELF_HOSTED:
             return isEnterprise;
+        // Community (unlicensed) self-hosted has no tier to fall short of:
+        // SSO and activity logs run on the operator's own box. Mirrors
+        // `isTeamsOrEnterpriseTierAllowed`.
+        case SubscriptionStatus.SELF_HOSTED:
+            return true;
         case SubscriptionStatus.TRIAL:
             return true;
         default:

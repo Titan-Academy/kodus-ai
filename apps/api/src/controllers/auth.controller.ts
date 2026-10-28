@@ -1,6 +1,7 @@
 import {
     Body,
     Controller,
+    ForbiddenException,
     Get,
     Param,
     Post,
@@ -22,6 +23,7 @@ import { RefreshTokenUseCase } from '@libs/identity/application/use-cases/auth/r
 import { ResendEmailUseCase } from '@libs/identity/application/use-cases/auth/resend-email.use-case';
 import { ResetPasswordUseCase } from '@libs/identity/application/use-cases/auth/resetPasswordUseCase';
 import { SignUpUseCase } from '@libs/identity/application/use-cases/auth/signup.use-case';
+import { SingleTenantService } from '@libs/identity/infrastructure/adapters/services/single-tenant.service';
 
 import { SSOCheckUseCase } from '@libs/ee/sso/use-cases/sso-check.use-case';
 import { SSOLoginUseCase } from '@libs/ee/sso/use-cases/sso-login.use-case';
@@ -76,6 +78,7 @@ export class AuthController {
         private readonly ssoCheckUseCase: SSOCheckUseCase,
         private readonly ssoTestSessionService: SSOTestSessionService,
         private readonly createHelpdeskTokenUseCase: CreateHelpdeskTokenUseCase,
+        private readonly singleTenant: SingleTenantService,
     ) {}
 
     @Post('login')
@@ -118,9 +121,18 @@ export class AuthController {
     @Public()
     @ApiOperation({
         summary: 'Sign up',
-        description: 'Create a user (and organization when applicable).',
+        description:
+            'Create a user (and organization when applicable). Closed in single-tenant deployments — accounts there are created by the first identity-provider login instead.',
     })
     async signUp(@Body() body: SignUpDTO) {
+        // Open registration would let anyone who can reach the api create an
+        // organization of their own, which is precisely what a single-tenant
+        // deployment forbids. First login through `POST /auth/oauth` is the
+        // only way in; it pins the account to the deployment's organization.
+        if (this.singleTenant.enabled) {
+            throw new ForbiddenException('api.users.registration_disabled');
+        }
+
         return await this.signUpUseCase.execute(body);
     }
 

@@ -87,13 +87,16 @@ describe("isCockpitTierAllowed (web mirror)", () => {
         }
     });
 
-    it("unlicensed self-hosted → blocked", () => {
+    it("unlicensed self-hosted (community) → allowed", () => {
+        // Free self-hosting is fully featured: the dashboard measures reviews
+        // running on the operator's own machine, so there is no tier to fall
+        // short of. Mirrors `isTeamsOrEnterpriseTierAllowed` in libs/ee.
         expect(
             isCockpitTierAllowed({
                 valid: true,
                 subscriptionStatus: "self-hosted",
             } satisfies OrganizationLicense),
-        ).toBe(false);
+        ).toBe(true);
     });
 
     it("trial → allowed", () => {
