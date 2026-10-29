@@ -15,6 +15,14 @@ export interface IAuthService {
      * reports no verified email. The returned email — never a client-supplied
      * one — is the only trustworthy identity for an OAuth login.
      */
+    /**
+     * Throws unless the token's owner is an active member of `organization` on
+     * GitHub. Uses the user's own token, so it needs the `read:org` scope.
+     */
+    assertGithubOrgMembership(
+        accessToken: string,
+        organization: string,
+    ): Promise<void>;
     verifyOAuthProviderEmail(
         authProvider: AuthProvider,
         accessToken: string,

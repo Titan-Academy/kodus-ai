@@ -55,6 +55,13 @@ const githubProvider = GithubProvider({
     id: AuthProviders.GITHUB,
     clientId: process.env.WEB_OAUTH_GITHUB_CLIENT_ID!,
     clientSecret: process.env.WEB_OAUTH_GITHUB_CLIENT_SECRET!,
+    // `read:org` is what lets the API ask GitHub whether this account is an
+    // active member of the configured organisation. Without it the membership
+    // endpoint answers 404 and every sign-in would look like a non-member.
+    // Adding a scope means existing users re-consent once on next sign-in.
+    authorization: {
+        params: { scope: "read:user user:email read:org" },
+    },
 });
 
 const gitlabBaseUrl = process.env.WEB_GITLAB_OAUTH_URL

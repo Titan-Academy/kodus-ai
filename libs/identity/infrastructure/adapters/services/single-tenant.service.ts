@@ -2,10 +2,6 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import { createLogger } from '@libs/core/log/logger';
 import {
-    IUsersService,
-    USER_SERVICE_TOKEN,
-} from '@libs/identity/domain/user/contracts/user.service.contract';
-import {
     IOrganizationService,
     ORGANIZATION_SERVICE_TOKEN,
 } from '@libs/organization/domain/organization/contracts/organization.service.contract';
@@ -31,6 +27,12 @@ import { OrganizationEntity } from '@libs/organization/domain/organization/entit
 export interface SingleTenantConfig {
     enabled: boolean;
     organizationName: string;
+    /**
+     * The GitHub organisation that IS the allow-list for sign-in. Membership is
+     * checked against it on every GitHub login, so no invitation is needed and
+     * nobody outside the org can create an account.
+     */
+    githubOrg: string;
 }
 
 const DEFAULT_ORGANIZATION_NAME = 'Kodus';
@@ -45,6 +47,7 @@ export const readSingleTenantConfig = (): SingleTenantConfig => ({
     organizationName:
         (process.env.API_SINGLE_TENANT_ORGANIZATION_NAME ?? '').trim() ||
         DEFAULT_ORGANIZATION_NAME,
+    githubOrg: (process.env.API_SINGLE_TENANT_GITHUB_ORG ?? '').trim(),
 });
 
 @Injectable()
@@ -61,8 +64,6 @@ export class SingleTenantService {
     constructor(
         @Inject(ORGANIZATION_SERVICE_TOKEN)
         private readonly organizationService: IOrganizationService,
-        @Inject(USER_SERVICE_TOKEN)
-        private readonly usersService: IUsersService,
     ) {}
 
     get config(): SingleTenantConfig {
@@ -116,34 +117,6 @@ export class SingleTenantService {
         }
 
         return created;
-    }
-
-    /**
-     * Whether an unknown account may be provisioned on first sign-in.
-     *
-     * A single-tenant install is one company's workspace, not a public
-     * service: an account that is not already part of it has no business
-     * getting in, and the old behaviour — provision whoever the provider
-     * verifies — let any GitHub account hold of the login button into the
-     * company's reviews. Admins add people from Organization → Members (which
-     * creates the account, so the next sign-in finds it and skips this check).
-     *
-     * The one exception is bootstrap: while the workspace has no members at all
-     * nobody could add anybody, so the first verified login creates the
-     * organization and becomes its owner.
-     */
-    async allowsNewAccount(): Promise<boolean> {
-        if (!this.enabled) return true;
-
-        // No organization yet is the same bootstrap case as an empty one.
-        const organization = await this.getOrganization();
-        if (!organization) return true;
-
-        const members = await this.usersService.find({
-            organization: { uuid: organization.uuid },
-        });
-
-        return members.length === 0;
     }
 
     /**

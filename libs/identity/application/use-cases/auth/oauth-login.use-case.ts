@@ -4,7 +4,6 @@ import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 
 import { AuthProvider } from '@libs/core/domain/enums/auth-provider.enum';
 import { IUseCase } from '@libs/core/domain/interfaces/use-case.interface';
-import { createLogger } from '@libs/core/log/logger';
 import {
     AUTH_SERVICE_TOKEN,
     IAuthService,
@@ -17,8 +16,6 @@ import { SignUpUseCase } from './signup.use-case';
 
 @Injectable()
 export class OAuthLoginUseCase implements IUseCase {
-    private readonly logger = createLogger(OAuthLoginUseCase.name);
-
     constructor(
         @Inject(AUTH_SERVICE_TOKEN)
         private readonly authService: IAuthService,
@@ -44,31 +41,32 @@ export class OAuthLoginUseCase implements IUseCase {
             );
             const verifiedEmail = verified.email;
 
+            // Single-tenant: the company's GitHub organisation is the allow-list.
+            // Checked before the account lookup, so it applies to existing
+            // members as well as new ones — leaving the org ends the access.
+            // Email/password is not a path here: no verified identity comes with
+            // it, so it would be a way around this rule.
+            if (this.singleTenant.enabled) {
+                if (authProvider !== AuthProvider.GITHUB) {
+                    throw new UnauthorizedException(
+                        'api.users.github_signin_only',
+                    );
+                }
+
+                await this.authService.assertGithubOrgMembership(
+                    providerRefreshToken,
+                    this.singleTenant.config.githubOrg,
+                );
+            }
+
             let user = await this.authService.validateUser({
                 email: verifiedEmail,
             });
 
             if (!user) {
-                // A single-tenant workspace only admits accounts an admin already
-                // added; the first login on an empty workspace bootstraps the
-                // owner. Without this every GitHub account that can reach the
-                // login page becomes a member of the company workspace.
-                if (!(await this.singleTenant.allowsNewAccount())) {
-                    this.logger.warn({
-                        message:
-                            'Rejected sign-in from an account outside the workspace',
-                        context: OAuthLoginUseCase.name,
-                        metadata: {
-                            authProvider,
-                            email: verifiedEmail,
-                        },
-                    });
-
-                    throw new UnauthorizedException(
-                        'api.users.not_a_member',
-                    );
-                }
-
+                // Past the org gate above, so this account is a colleague who
+                // has not signed in before: provision them. The first such login
+                // creates the workspace and owns it.
                 user = await this.signUpUseCase.execute({
                     email: verifiedEmail,
                     name: verified.name || name,

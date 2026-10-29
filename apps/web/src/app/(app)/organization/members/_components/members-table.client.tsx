@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 import { Badge } from "@components/ui/badge";
 import { Button } from "@components/ui/button";
 import { Card } from "@components/ui/card";
-import { Input } from "@components/ui/input";
 import { useToast } from "@components/ui/toaster/use-toast";
 import type { TeamMember } from "@services/teams/fetch";
-import { useCreateOrUpdateTeamMembers } from "@services/setup/hooks";
 import { updateUser } from "@services/users/fetch";
 import { UserRole, UserStatus } from "@enums";
 import { useAuth } from "src/core/providers/auth.provider";
@@ -37,12 +35,18 @@ const ROLE_SELECT_CLASS =
     "h-8 rounded-lg bg-card-lv2 px-2 text-sm text-text-primary ring-1 ring-card-lv3 " +
     "outline-none focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60";
 
+/**
+ * Who is in the workspace and what each of them may do.
+ *
+ * Admission is handled by the API, not here: a GitHub login has to belong to
+ * the configured organisation to get an account at all. So this screen does not
+ * invite anybody — it manages the people who already got in: their role, and
+ * whether they may still sign in.
+ */
 export const MembersTable = ({
-    teamId,
     initialMembers,
     loadError,
 }: {
-    teamId: string;
     initialMembers: TeamMember[];
     loadError?: string;
 }) => {
@@ -51,64 +55,33 @@ export const MembersTable = ({
     const { toast } = useToast();
     const router = useRouter();
     const { userId: currentUserId } = useAuth();
-    const [inviteEmail, setInviteEmail] = useState("");
-    const invite = useCreateOrUpdateTeamMembers();
 
-    // Adding a member creates their account (pending, awaiting the invitation
-    // email) — which is what lets them sign in at all, since an unknown
-    // account is refused. If mail is not configured the row can be flipped to
-    // active below, so onboarding never depends on the mail path.
-    const addMember = useCallback(async () => {
-        const email = inviteEmail.trim();
-        if (!email) return;
-
-        try {
-            await invite.mutateAsync({ members: [{ email }], teamId });
-            setInviteEmail("");
-            toast({
-                title: `Added ${email}`,
-                description:
-                    "They can sign in once their account is active, and the invitation email has gone out.",
-                variant: "success",
-            });
-            router.refresh();
-        } catch (error) {
-            toast({
-                title: "Could not add that member",
-                description:
-                    error instanceof Error ? error.message : "Please try again.",
-                variant: "danger",
-            });
-        }
-    }, [invite, inviteEmail, router, teamId, toast]);
-
-    const changeRole = useCallback(
-        async (member: TeamMember, role: UserRole) => {
+    const patch = useCallback(
+        async (
+            member: TeamMember,
+            data: { role?: UserRole; status?: UserStatus },
+            optimistic: (row: TeamMember) => TeamMember,
+            title: string,
+        ) => {
             const id = member.userId;
             if (!id) return;
 
-            // Optimistic: the row reads back the chosen role immediately and a
-            // failure puts it back. The workspace is small; a spinner plus a
-            // refetch is more noise than information.
             const previous = members;
 
             setSavingUserId(id);
             setMembers((rows) =>
-                rows.map((row) => (row.userId === id ? { ...row, role } : row)),
+                rows.map((row) => (row.userId === id ? optimistic(row) : row)),
             );
 
             try {
-                await updateUser(id, { role });
-                toast({
-                    title: `${member.name} is now ${ROLE_LABEL[role] ?? role}`,
-                    variant: "success",
-                });
+                await updateUser(id, data);
+                toast({ title, variant: "success" });
                 // Nav and screens re-derive from the session role.
                 router.refresh();
             } catch (error) {
                 setMembers(previous);
                 toast({
-                    title: "Could not change that role",
+                    title: "Could not save that change",
                     description:
                         error instanceof Error
                             ? error.message
@@ -122,50 +95,23 @@ export const MembersTable = ({
         [members, router, toast],
     );
 
-    const toggleActive = useCallback(
-        async (member: TeamMember) => {
-            const id = member.userId;
-            if (!id) return;
+    const changeRole = (member: TeamMember, role: UserRole) =>
+        patch(
+            member,
+            { role },
+            (row) => ({ ...row, role }),
+            `${member.name} is now ${ROLE_LABEL[role] ?? role}`,
+        );
 
-            const previous = members;
-            const nextStatus = member.active
-                ? UserStatus.INACTIVE
-                : UserStatus.ACTIVE;
-
-            setSavingUserId(id);
-            setMembers((rows) =>
-                rows.map((row) =>
-                    row.userId === id
-                        ? { ...row, active: !member.active }
-                        : row,
-                ),
-            );
-
-            try {
-                await updateUser(id, { status: nextStatus });
-                toast({
-                    title: member.active
-                        ? `${member.name} can no longer sign in`
-                        : `${member.name} can sign in again`,
-                    variant: "success",
-                });
-                router.refresh();
-            } catch (error) {
-                setMembers(previous);
-                toast({
-                    title: "Could not change that member",
-                    description:
-                        error instanceof Error
-                            ? error.message
-                            : "Please try again.",
-                    variant: "danger",
-                });
-            } finally {
-                setSavingUserId(undefined);
-            }
-        },
-        [members, router, toast],
-    );
+    const toggleActive = (member: TeamMember) =>
+        patch(
+            member,
+            { status: member.active ? UserStatus.INACTIVE : UserStatus.ACTIVE },
+            (row) => ({ ...row, active: !member.active }),
+            member.active
+                ? `${member.name} can no longer sign in`
+                : `${member.name} can sign in again`,
+        );
 
     if (loadError) {
         return (
@@ -180,22 +126,12 @@ export const MembersTable = ({
 
     if (members.length === 0) {
         return (
-            <div className="flex flex-col gap-4">
-                <Card color="lv1" className="p-5">
-                    <p className="text-sm">No members yet.</p>
-                    <p className="text-text-secondary mt-1 text-xs">
-                        The first account to sign in becomes the owner, so
-                        normally nobody needs adding until there is an owner.
-                    </p>
-                </Card>
-
-                <AddMemberRow
-                    email={inviteEmail}
-                    onEmailChange={setInviteEmail}
-                    onAdd={addMember}
-                    pending={invite.isPending}
-                />
-            </div>
+            <Card color="lv1" className="p-5">
+                <p className="text-sm">No members yet.</p>
+                <p className="text-text-secondary mt-1 text-xs">
+                    The first account to sign in becomes the owner.
+                </p>
+            </Card>
         );
     }
 
@@ -213,8 +149,9 @@ export const MembersTable = ({
             {members.map((member) => {
                 const isSelf =
                     !!member.userId && member.userId === currentUserId;
-                // The last active owner cannot lose the role — that leaves a
-                // workspace nobody can administer, with no screen to fix it.
+                // The last active owner cannot lose the role or be deactivated —
+                // that leaves a workspace nobody can administer, with no screen
+                // to fix it from.
                 const isLastOwner =
                     member.role === UserRole.OWNER && ownerCount === 1;
                 const locked = isSelf || isLastOwner || !member.userId;
@@ -241,90 +178,42 @@ export const MembersTable = ({
                         </div>
 
                         <div className="flex items-center gap-2">
-                        <Button
-                            size="xs"
-                            variant={member.active ? "cancel" : "primary"}
-                            disabled={locked || savingUserId === member.userId}
-                            onClick={() => toggleActive(member)}>
-                            {member.active ? "Deactivate" : "Activate"}
-                        </Button>
+                            <Button
+                                size="xs"
+                                variant={member.active ? "cancel" : "primary"}
+                                disabled={locked || savingUserId === member.userId}
+                                onClick={() => toggleActive(member)}>
+                                {member.active ? "Deactivate" : "Activate"}
+                            </Button>
 
-                        <select
-                            aria-label={`Role for ${member.name}`}
-                            className={ROLE_SELECT_CLASS}
-                            value={member.role}
-                            disabled={locked || savingUserId === member.userId}
-                            onChange={(event) =>
-                                changeRole(
-                                    member,
-                                    event.target.value as UserRole,
-                                )
-                            }>
-                            {ASSIGNABLE_ROLES.map((role) => (
-                                <option key={role.value} value={role.value}>
-                                    {role.label}
-                                </option>
-                            ))}
-                        </select>
+                            <select
+                                aria-label={`Role for ${member.name}`}
+                                className={ROLE_SELECT_CLASS}
+                                value={member.role}
+                                disabled={
+                                    locked || savingUserId === member.userId
+                                }
+                                onChange={(event) =>
+                                    changeRole(
+                                        member,
+                                        event.target.value as UserRole,
+                                    )
+                                }>
+                                {ASSIGNABLE_ROLES.map((role) => (
+                                    <option key={role.value} value={role.value}>
+                                        {role.label}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
                     </div>
                 );
             })}
 
             <p className="text-text-secondary px-5 py-3 text-xs">
-                Only an owner can change roles. The last owner cannot demote or
-                deactivate themselves.
+                Anyone in the GitHub organisation can sign in. Deactivating a
+                member here is what keeps an individual out.
             </p>
-
-            <div className="px-5 py-4">
-                <AddMemberRow
-                    email={inviteEmail}
-                    onEmailChange={setInviteEmail}
-                    onAdd={addMember}
-                    pending={invite.isPending}
-                />
-            </div>
         </Card>
     );
 };
-
-/** Adds a member by email — the account is created here, which is what makes
- *  the next sign-in from that address admissible. */
-const AddMemberRow = ({
-    email,
-    onEmailChange,
-    onAdd,
-    pending,
-}: {
-    email: string;
-    onEmailChange: (value: string) => void;
-    onAdd: () => void;
-    pending: boolean;
-}) => (
-    <form
-        className="flex items-end gap-2"
-        onSubmit={(event) => {
-            event.preventDefault();
-            onAdd();
-        }}>
-        <label className="flex flex-1 flex-col gap-1">
-            <span className="text-text-secondary text-xs">
-                Add a member by GitHub email
-            </span>
-            <Input
-                type="email"
-                placeholder="name@tracktitan.io"
-                value={email}
-                onChange={(event) => onEmailChange(event.target.value)}
-            />
-        </label>
-        <Button
-            type="submit"
-            size="md"
-            variant="primary"
-            loading={pending}
-            disabled={!email.trim()}>
-            Add member
-        </Button>
-    </form>
-);

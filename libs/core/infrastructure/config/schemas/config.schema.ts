@@ -41,4 +41,7 @@ export const configSchema = Joi.object({
         .optional()
         .allow('')
         .default('Kodus'),
+    // The GitHub organisation that decides who may sign in. Checked on every
+    // GitHub login; unset means nobody can (fail closed).
+    API_SINGLE_TENANT_GITHUB_ORG: Joi.string().optional().allow('').default(''),
 });

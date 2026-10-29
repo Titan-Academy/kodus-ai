@@ -443,6 +443,62 @@ export class AuthService implements IAuthService {
      * the account identity. Any failure is surfaced as Unauthorized without
      * leaking provider detail.
      */
+    /**
+     * Is the token's owner an active member of `organization` on GitHub?
+     *
+     * This is the admission rule for a single-tenant install: the GitHub
+     * organisation IS the allow-list, so nobody has to be invited by email and
+     * nobody outside the company can provision themselves a workspace account.
+     *
+     * 404 is the normal answer for a non-member (GitHub hides the membership),
+     * and it is also what an under-scoped token gets — either way the caller is
+     * not provably a member, so both fail closed. An organisation that is
+     * unset is a misconfiguration and must never read as "everyone is a
+     * member".
+     */
+    async assertGithubOrgMembership(
+        accessToken: string,
+        organization: string,
+    ): Promise<void> {
+        const org = organization?.trim();
+        if (!org) {
+            throw new InternalServerErrorException(
+                'API_SINGLE_TENANT_GITHUB_ORG is not set',
+            );
+        }
+
+        try {
+            const response = await axios.get(
+                `https://api.github.com/user/memberships/orgs/${encodeURIComponent(org)}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                        Accept: 'application/vnd.github+json',
+                        'X-GitHub-Api-Version': '2022-11-28',
+                        'User-Agent': 'kodus-auth',
+                    },
+                    timeout: INTEGRATION_REQUEST_TIMEOUT_MS,
+                },
+            );
+
+            // `pending` means invited to the GitHub org but not accepted yet.
+            if (response.data?.state === 'active') return;
+        } catch (error) {
+            this.logger.warn({
+                message: 'GitHub org membership check failed',
+                context: AuthService.name,
+                metadata: {
+                    organization: org,
+                    status:
+                        (error as any)?.response?.status ??
+                        (error instanceof Error ? error.message : 'unknown'),
+                },
+            });
+        }
+
+        throw new UnauthorizedException('api.users.not_a_member');
+    }
+
     async verifyOAuthProviderEmail(
         authProvider: AuthProvider,
         accessToken: string,

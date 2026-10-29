@@ -7,12 +7,11 @@ import { MembersTable } from "./_components/members-table.client";
 /**
  * Who is in this workspace and what each of them may do.
  *
- * This is the control that a single-tenant install cannot do without: sign-in
- * is closed to accounts the workspace does not already have (see
- * `SingleTenantService.allowsNewAccount`), so an admin has to be able to see
- * who is in it and change what they are. In the paid product this lived on the
- * subscription screen as seat assignment; with no plans there are no seats, and
- * the meaningful control is the role.
+ * Admission happens in the API (a GitHub login must belong to the configured
+ * organisation), so this screen is about the people who are already in: their
+ * role, and whether they may still sign in. In the paid product this lived on
+ * the subscription screen as seat assignment; with no plans there are no seats,
+ * and the meaningful control is the role.
  */
 export default async function OrganizationMembersPage() {
     const teamId = await getGlobalSelectedTeamId();
@@ -42,7 +41,6 @@ export default async function OrganizationMembersPage() {
 
             <Page.Content>
                 <MembersTable
-                    teamId={teamId}
                     initialMembers={members}
                     loadError={loadError}
                 />

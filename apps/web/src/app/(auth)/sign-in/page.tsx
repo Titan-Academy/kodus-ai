@@ -6,7 +6,6 @@ import { Link } from "@components/ui/link";
 import { Page } from "@components/ui/page";
 
 import { OAuthButtons } from "../components/oauth";
-import { UserAuthForm } from "../components/user-auth-form";
 import { edition } from "src/core/utils/edition";
 
 export const metadata: Metadata = {
@@ -37,17 +36,11 @@ export default function LoginPage() {
                         <OAuthButtons />
                     </Suspense>
 
-                    <div className="mt-4 flex w-full flex-row items-center">
-                        <hr className="flex-1 border-[#6A57A433]" />
-                        <p className="text-text-secondary px-6 text-[13px]">
-                            Or sign in with
-                        </p>
-                        <hr className="flex-1 border-[#6A57A433]" />
-                    </div>
-
-                    <Suspense>
-                        <UserAuthForm />
-                    </Suspense>
+                    {/* Email/password sign-in is gone: this deployment admits
+                        people by GitHub organisation membership, so a password
+                        would be a second, unverified identity — and with no
+                        self-service signup there is nothing to point
+                        "forgot password" at. */}
 
                     {!edition.closedRegistration && (
                         <div className="mt-4 text-center text-sm">
@@ -55,11 +48,6 @@ export default function LoginPage() {
                             <Link href="/sign-up">Sign up for free</Link>
                         </div>
                     )}
-                    <Link
-                        className="mx-auto mt-4 text-center text-sm underline"
-                        href="/forgot-password">
-                        Forgot Password?
-                    </Link>
                 </Page.Content>
             </div>
         </Page.Root>
