@@ -16,7 +16,7 @@ name: "Themis: build and publish self-hosted images"
 # Only `linux/amd64` is built: the Themis host is deliberately x86_64 (the
 # upstream arm64 images would run under emulation there, and vice versa).
 #
-# NOT built here: `mcp-manager`. Themis does not run that service.
+# `mcp-manager` IS built: the MCP plugin feature is served by that container.
 
 on:
     workflow_dispatch:
@@ -97,6 +97,7 @@ jobs:
                   WORKER_TAGS: ${{ env.REGISTRY }}/kodus-ai-worker:sha-${{ github.sha }}
                   WEB_TAGS: ${{ env.REGISTRY }}/kodus-ai-web:sha-${{ github.sha }}
                   RABBITMQ_TAGS: ${{ env.REGISTRY }}/kodus-rabbitmq:sha-${{ github.sha }}
+                  MCP_MANAGER_TAGS: ${{ env.REGISTRY }}/kodus-mcp-manager:sha-${{ github.sha }}
               run: |
                   set -euo pipefail
                   docker buildx bake -f docker-bake.hcl \
@@ -104,7 +105,7 @@ jobs:
                     --set base.args.API_CLOUD_MODE=false \
                     --set *.platform=linux/amd64 \
                     --push \
-                    api webhooks worker web rabbitmq
+                    api webhooks worker web rabbitmq mcp-manager
 
             - name: Summarise
               run: |
@@ -120,7 +121,7 @@ jobs:
                     echo
                     echo "| Image |"
                     echo "| --- |"
-                    for svc in kodus-ai-api kodus-ai-webhook kodus-ai-worker kodus-ai-web kodus-rabbitmq; do
+                    for svc in kodus-ai-api kodus-ai-webhook kodus-ai-worker kodus-ai-web kodus-rabbitmq kodus-mcp-manager; do
                       echo "| \`${REGISTRY}/${svc}:sha-${GITHUB_SHA}\` |"
                     done
                   } >> "$GITHUB_STEP_SUMMARY"
