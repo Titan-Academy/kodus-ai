@@ -27,6 +27,7 @@ import {
     ILicenseService,
     LICENSE_SERVICE_TOKEN,
     OrganizationLicenseValidationResult,
+    SubscriptionStatus,
     UserWithLicense,
 } from '@libs/ee/license/interfaces/license.interface';
 import {
@@ -676,6 +677,16 @@ export class PermissionValidationService {
 
         // No license or invalid → Community Edition, allow everything
         if (!validation?.valid) {
+            return { allowed: true };
+        }
+
+        // Seats belong to a licence KEY. Community (unlicensed) self-hosted is
+        // fully featured and unmetered, so there is nothing to assign and no
+        // author to exclude — `SelfHostedLicenseService.communityLicense()`
+        // reports it as VALID with status `self-hosted`, and without this guard
+        // that fell straight into the seat path below and rejected every author
+        // as "User Not Licensed", skipping every review on the install.
+        if (validation.subscriptionStatus !== SubscriptionStatus.LICENSED_SELF_HOSTED) {
             return { allowed: true };
         }
 

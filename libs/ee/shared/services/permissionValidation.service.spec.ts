@@ -1,4 +1,6 @@
 import '@libs/llm/providers'; // self-register provider modules (routing capability gate)
+import { SubscriptionStatus } from '@libs/ee/license/interfaces/license.interface';
+
 import {
     PermissionValidationService,
     ValidationErrorType,
@@ -56,7 +58,10 @@ describe('PermissionValidationService — self-hosted seat enforcement', () => {
         const { svc } = makeService({
             validateOrganizationLicense: jest
                 .fn()
-                .mockResolvedValue({ valid: true }),
+                .mockResolvedValue({
+                    valid: true,
+                    subscriptionStatus: SubscriptionStatus.LICENSED_SELF_HOSTED,
+                }),
         });
 
         const res = await svc.validateExecutionPermissions(orgTeam, undefined);
@@ -68,7 +73,10 @@ describe('PermissionValidationService — self-hosted seat enforcement', () => {
         const { svc } = makeService({
             validateOrganizationLicense: jest
                 .fn()
-                .mockResolvedValue({ valid: true }),
+                .mockResolvedValue({
+                    valid: true,
+                    subscriptionStatus: SubscriptionStatus.LICENSED_SELF_HOSTED,
+                }),
             getAllUsersWithLicense: jest
                 .fn()
                 .mockResolvedValue([{ git_id: 'someone-else' }]),
@@ -80,11 +88,35 @@ describe('PermissionValidationService — self-hosted seat enforcement', () => {
         expect(res.errorType).toBe(ValidationErrorType.USER_NOT_LICENSED);
     });
 
+    // THE regression of 2026-10-29: community self-hosted started reporting
+    // `{ valid: true, subscriptionStatus: 'self-hosted' }` so that free installs
+    // are fully featured. The seat gate keyed off `valid` alone, so every
+    // community install fell into the paid path and skipped every review with
+    // "User Not Licensed — Assign seat to user", despite having no seats to
+    // assign and no author to exclude.
+    it('community self-hosted (no key) → allowed, and never reads seats', async () => {
+        const { svc, licenseService } = makeService({
+            validateOrganizationLicense: jest.fn().mockResolvedValue({
+                valid: true,
+                subscriptionStatus: SubscriptionStatus.SELF_HOSTED,
+            }),
+            getAllUsersWithLicense: jest.fn().mockResolvedValue([]),
+        });
+
+        const res = await svc.validateExecutionPermissions(orgTeam, '5993570');
+
+        expect(res.allowed).toBe(true);
+        expect(licenseService.getAllUsersWithLicense).not.toHaveBeenCalled();
+    });
+
     it('licensed + author HAS a seat → allowed', async () => {
         const { svc } = makeService({
             validateOrganizationLicense: jest
                 .fn()
-                .mockResolvedValue({ valid: true }),
+                .mockResolvedValue({
+                    valid: true,
+                    subscriptionStatus: SubscriptionStatus.LICENSED_SELF_HOSTED,
+                }),
             getAllUsersWithLicense: jest
                 .fn()
                 .mockResolvedValue([{ git_id: '5993570' }]),
@@ -104,7 +136,10 @@ describe('PermissionValidationService — self-hosted seat enforcement', () => {
         const { svc } = makeService({
             validateOrganizationLicense: jest
                 .fn()
-                .mockResolvedValue({ valid: true }),
+                .mockResolvedValue({
+                    valid: true,
+                    subscriptionStatus: SubscriptionStatus.LICENSED_SELF_HOSTED,
+                }),
             getAllUsersWithLicense: jest
                 .fn()
                 .mockResolvedValue([{ git_id: 5993570 as unknown as string }]),
