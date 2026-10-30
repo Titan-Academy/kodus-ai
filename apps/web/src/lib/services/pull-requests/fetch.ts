@@ -219,3 +219,29 @@ export const getReviewedPullRequestCount = async ({
         return null;
     }
 };
+
+/**
+ * Correct Kody's stored merge state for one pull request.
+ *
+ * The state shown in the UI is a column on Kody's own `pull_requests` row,
+ * written from webhook payloads — not read live from the provider. When that
+ * write is missed (a review that ended in error, a dropped delivery, a PR merged
+ * while the app was restarting) the row stays stale and the list keeps showing
+ * the review status instead of "Merged". This corrects the record; it does not
+ * touch the pull request on GitHub.
+ */
+export const setPullRequestState = async (params: {
+    repositoryId: string;
+    pullRequestNumber: number;
+    merged: boolean;
+}): Promise<{ merged: boolean }> => {
+    const response = await authorizedFetch<{ merged: boolean }>(
+        pathToApiUrl("/pull-requests/state"),
+        {
+            method: "PATCH",
+            body: JSON.stringify(params),
+        },
+    );
+
+    return response ?? { merged: params.merged };
+};

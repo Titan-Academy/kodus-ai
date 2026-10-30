@@ -38,6 +38,7 @@ import {
     Inject,
     NotFoundException,
     OnApplicationShutdown,
+    Patch,
     Post,
     Query,
     Res,
@@ -135,6 +136,73 @@ export class PullRequestController implements OnApplicationShutdown {
     onApplicationShutdown() {
         this.shutdown$.next();
         this.shutdown$.complete();
+    }
+
+    /**
+     * Mark a pull request's stored state as merged (or back to open).
+     *
+     * This exists because the state Kody shows is a COLUMN on its own
+     * `pull_requests` row, written from webhook payloads — not the provider's
+     * live state. When that write is missed (a review that ended in error, a
+     * dropped delivery, a PR merged while the app was restarting) the row stays
+     * stale forever and the list keeps showing the review status instead of
+     * "Merged". Until the webhook path is proven to cover every case, an admin
+     * needs a way to correct the record.
+     *
+     * It only corrects Kody's record. It does not touch the pull request on
+     * GitHub.
+     */
+    @Patch('/state')
+    @ApiBearerAuth('jwt')
+    @UseGuards(PolicyGuard)
+    @CheckPolicies(
+        checkPermissions({
+            action: Action.Update,
+            resource: ResourceType.PullRequests,
+        }),
+    )
+    @ApiOperation({
+        summary: 'Set a pull request state',
+        description:
+            "Corrects Kody's stored merge state for one pull request. Does not change the pull request on the provider.",
+    })
+    public async setPullRequestState(
+        @Body()
+        body: {
+            repositoryId: string;
+            pullRequestNumber: number;
+            merged: boolean;
+        },
+    ): Promise<{ merged: boolean }> {
+        const organizationId = this.request.user?.organization?.uuid;
+
+        if (!organizationId) {
+            throw new BadRequestException('organizationId is required');
+        }
+
+        const pullRequest =
+            await this.pullRequestsService.findByNumberAndRepositoryId(
+                body.pullRequestNumber,
+                body.repositoryId,
+                { organizationId },
+            );
+
+        if (!pullRequest) {
+            throw new NotFoundException(
+                `Pull request #${body.pullRequestNumber} not found for this organization`,
+            );
+        }
+
+        const updated = await this.pullRequestsService.update(pullRequest, {
+            merged: body.merged,
+            // A merge without a recorded close time is what leaves rows looking
+            // open; fill it, but never overwrite a real one.
+            ...(body.merged && !pullRequest.closedAt
+                ? { closedAt: new Date().toISOString() }
+                : {}),
+        });
+
+        return { merged: updated?.merged ?? body.merged };
     }
 
     @Get('/executions')

@@ -1661,6 +1661,17 @@
     }
   },
   {
+    "key": "pullRequest.controller.ts#setPullRequestState",
+    "httpMethod": "PATCH",
+    "urlPath": "/pull-requests/state",
+    "expected": {
+      "owner": "allow",
+      "billing_manager": "deny",
+      "repo_admin": "deny",
+      "contributor": "deny"
+    }
+  },
+  {
     "key": "pullRequestMessages.controller.ts#createOrUpdatePullRequestMessages",
     "httpMethod": "POST",
     "urlPath": "/pull-request-messages",
