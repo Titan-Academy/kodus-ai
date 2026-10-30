@@ -114,9 +114,16 @@ export function PullRequestsPageClient() {
     // plain filter and not another `view`: the whole point is that it composes
     // with Repo / Author / Status, which the `awaiting` view cannot do because
     // it swaps the list component out entirely.
+    // Defaults to OPEN. This screen exists to show what still needs a human, so
+    // listing merged work by default buries the queue that matters. "all" is an
+    // explicit value rather than "no value" for a reason: with a bare
+    // `withDefault`, choosing All would clear the param and snap straight back
+    // to the default.
     const [prState, setPrState] = useQueryState(
         "prState",
-        parseAsStringLiteral(["open", "closed"] as const).withOptions(urlOpts),
+        parseAsStringLiteral(["open", "closed", "all"] as const)
+            .withDefault("open")
+            .withOptions(urlOpts),
     );
 
     // View scope is temporarily PINNED to the team dashboard — the "My queue /
@@ -201,7 +208,7 @@ export function PullRequestsPageClient() {
             status: statusFilter ?? undefined,
             needsAttention: needsAttention === "true" ? true : undefined,
             author: effectiveAuthor,
-            prState: prState ?? undefined,
+            prState: prState === "all" ? undefined : prState,
             createdAtFrom: createdAtFrom ?? undefined,
             // Make the "to" bound inclusive of the whole selected day.
             createdAtTo: createdAtTo
@@ -325,13 +332,15 @@ export function PullRequestsPageClient() {
                 setAuthorPolicy("reviewable");
             },
         },
-        prState && {
+        // Only when it leaves the default: a chip that is always on is noise,
+        // and it would make "open" look like something the viewer chose.
+        prState !== "open" && {
             key: "prState",
             // "Review status" is the other filter (Kody's run), so this one
             // says PR out loud to keep the two apart on screen.
-            label: prState === "open" ? "PR: Open" : "PR: Closed",
+            label: prState === "closed" ? "PR: Closed" : "PR: All",
             clear: () => {
-                setPrState(null);
+                setPrState("open");
             },
         },
         statusFilter && {
@@ -384,8 +393,9 @@ export function PullRequestsPageClient() {
         !!effectiveAuthor ||
         // The PR-state filter runs in the same post-query loop, so it makes
         // `filteredPrTotal` an upper bound too — without this the header would
-        // print a DB-level count next to a shorter list.
-        !!prState ||
+        // print a DB-level count next to a shorter list. `open` is the default,
+        // so it does not by itself make the filter "active".
+        prState !== "open" ||
         authorPolicy !== "all";
     const canUseExactFilteredTotal =
         hasActiveFilters &&
@@ -703,13 +713,9 @@ export function PullRequestsPageClient() {
                         waiting on a human, while Status describes how Kody's
                         run went. Pairing them makes the distinction legible. */}
                     <Select
-                        value={prState ?? "all"}
+                        value={prState}
                         onValueChange={(value) =>
-                            setPrState(
-                                value === "all"
-                                    ? null
-                                    : (value as "open" | "closed"),
-                            )
+                            setPrState(value as "open" | "closed" | "all")
                         }>
                         <SelectTrigger
                             size="sm"
